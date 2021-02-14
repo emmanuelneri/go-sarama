@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/Shopify/sarama"
 	"log"
-	"os"
 )
 
 type Consumer struct {
@@ -19,7 +18,7 @@ func NewConsumerGroup(brokersAddress []string, groupID string) Consumer {
 	config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
 	config.Consumer.Return.Errors = true
 	config.ClientID = "kafka-client"
-	sarama.Logger = log.New(os.Stdout, "[Sarama] - ", log.LstdFlags)
+	//sarama.Logger = log.New(os.Stdout, "[Sarama] - ", log.LstdFlags)
 
 	consumerGroup, err := sarama.NewConsumerGroup(brokersAddress, groupID, config)
 	if err != nil {
@@ -29,11 +28,17 @@ func NewConsumerGroup(brokersAddress []string, groupID string) Consumer {
 	return Consumer{consumerGroup: consumerGroup}
 }
 
-func (c *Consumer) Start(ctx context.Context, topics []string) {
-	handler := newConsumerHandler()
+func (c *Consumer) Start(ctx context.Context, topicsHandler map[string]func(m *sarama.ConsumerMessage)) {
+	consumerGroupHandler := newConsumerHandler()
+
+	topics := make([]string, 0, len(topicsHandler))
+	for k := range topicsHandler {
+		topics = append(topics, k)
+	}
+
 	go func() {
 		for {
-			err := c.consumerGroup.Consume(ctx, topics, handler)
+			err := c.consumerGroup.Consume(ctx, topics, consumerGroupHandler)
 			if err != nil {
 				log.Fatalf("consume group error %v \n", err)
 			}
@@ -43,15 +48,16 @@ func (c *Consumer) Start(ctx context.Context, topics []string) {
 				return
 			}
 
-			handler.ready = make(chan bool)
+			consumerGroupHandler.ready = make(chan bool)
 		}
 	}()
-	<-handler.ready
+	<-consumerGroupHandler.ready
 
 	for {
-		m := <-handler.consumedChan
-		log.Printf("message consumed %v \n", m)
-		handler.processedChan <- m
+		m := <-consumerGroupHandler.consumedChan
+		topicHandler := topicsHandler[m.Topic]
+		topicHandler(&m)
+		consumerGroupHandler.processedChan <- m
 	}
 }
 
