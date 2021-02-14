@@ -70,4 +70,7 @@ func TestStart(t *testing.T) {
 		cancel()
 		consumer.Stop()
 	})
+
+	// TODO process sequence
+	// TODO parallel process between topics
 }
