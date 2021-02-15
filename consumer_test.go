@@ -25,7 +25,7 @@ func TestStart(t *testing.T) {
 			},
 		}
 
-		testEnv := newTestEnv()
+		testEnv := newConsumerTestEnv()
 		testEnv.start(topicsHandler)
 
 		assert.Nil(t, it.ProduceMessage(personTopic, []byte("1"), []byte("Person 1")))
@@ -51,7 +51,7 @@ func TestStart(t *testing.T) {
 			}
 		}
 
-		testEnv := newTestEnv()
+		testEnv := newConsumerTestEnv()
 		testEnv.start(topicsHandler)
 
 		for i := 0; i < 5; i++ {
@@ -68,28 +68,28 @@ func TestStart(t *testing.T) {
 	// TODO parallel process between topics
 }
 
-type TestConsumerEnv struct {
+type ConsumerTestEnv struct {
 	ctx           context.Context
 	cancelCtxFunc context.CancelFunc
 	consumer      Consumer
 }
 
-func newTestEnv() TestConsumerEnv {
+func newConsumerTestEnv() ConsumerTestEnv {
 	consumer := NewConsumerGroup(test.BrokersAddress, groupID)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return TestConsumerEnv{
+	return ConsumerTestEnv{
 		ctx:           ctx,
 		cancelCtxFunc: cancel,
 		consumer:      consumer,
 	}
 }
 
-func (t *TestConsumerEnv) start(topicsHandler map[string]func(m *sarama.ConsumerMessage)) {
+func (t *ConsumerTestEnv) start(topicsHandler map[string]func(m *sarama.ConsumerMessage)) {
 	go t.consumer.Start(t.ctx, topicsHandler)
 }
 
-func (t *TestConsumerEnv) stop() {
+func (t *ConsumerTestEnv) stop() {
 	t.cancelCtxFunc()
 	t.consumer.Stop()
 }
