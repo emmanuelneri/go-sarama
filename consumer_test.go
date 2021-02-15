@@ -8,6 +8,7 @@ import (
 	"log"
 	"strconv"
 	"testing"
+	"time"
 )
 
 const groupID = "go-kafka-client"
@@ -64,7 +65,44 @@ func TestStart(t *testing.T) {
 		testEnv.stop()
 	})
 
-	// TODO process sequence
+	t.Run("should process in produce sequence when consume message", func(t *testing.T) {
+		topicsHandler := map[string]func(m *sarama.ConsumerMessage){}
+		topics := []string{"product", "user"}
+		quantityMsgs := 10
+
+		cacheMap := make(map[string]*test.Cache, 0)
+
+		for _, topic := range topics {
+			cache := test.NewCache()
+			cacheMap[topic] = cache
+
+			topicsHandler[topic] = func(m *sarama.ConsumerMessage) {
+				cache.Add(string(m.Key))
+			}
+
+			for i := 0; i < quantityMsgs; i++ {
+				assert.Nil(t, it.ProduceMessage(topic, []byte(strconv.Itoa(i)), []byte("Message "+strconv.Itoa(i))))
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+
+		testEnv := newConsumerTestEnv()
+		testEnv.start(topicsHandler)
+		it.AssertLastGroupOffset(t, groupID, topics[0], 0, int64(quantityMsgs))
+		it.AssertLastGroupOffset(t, groupID, topics[1], 0, int64(quantityMsgs))
+
+		for _, topic := range topics {
+			cache := cacheMap[topic]
+			values := cache.Values()
+			assert.Equal(t, quantityMsgs, len(values))
+			for i := 0; i < quantityMsgs; i++ {
+				assert.Equal(t, strconv.Itoa(i), values[i])
+			}
+		}
+
+		testEnv.stop()
+	})
+
 	// TODO parallel process between topics
 }
 
